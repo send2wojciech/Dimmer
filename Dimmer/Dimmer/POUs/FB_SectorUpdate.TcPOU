@@ -1,0 +1,33 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.4">
+  <POU Name="FB_SectorUpdate" Id="{939ad128-097b-4195-9c8f-03036f8915d9}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK PUBLIC FB_SectorUpdate
+VAR_INPUT
+	iS		:INT;	//numer sektora, z którego przyszło zapytanie
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+END_VAR
+VAR_IN_OUT
+	iCS_IN_OUT	:INT;	//sektor zapisany jako obecny
+	iPS_IN_OUT	:INT;	//sektor zapisany jako poprzedni
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF iS=iCS_IN_OUT THEN			//jeżeli sektor, z którego przyszło zapytanie jest zapisany jako obecny
+	;							//nic nie rób
+ELSE							//w przeciwnym wypadku		
+	iPS_IN_OUT:=iCS_IN_OUT;		//zapisz sektor stary obecny jako poprzedni 
+	iCS_IN_OUT:=iS;             //a ten z którego przyszło zapytanie jako obecny                      
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_SectorUpdate">
+      <LineId Id="9" Count="0" />
+      <LineId Id="16" Count="0" />
+      <LineId Id="19" Count="0" />
+      <LineId Id="28" Count="1" />
+      <LineId Id="17" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

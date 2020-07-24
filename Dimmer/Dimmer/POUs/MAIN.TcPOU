@@ -1,0 +1,79 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.4">
+  <POU Name="MAIN" Id="{e3f444e8-7c3c-436c-ab54-4726324cb71c}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM MAIN
+VAR
+	(*
+	tssAnalog		:FB_TriStableSwitch;
+	byOswietlenie	:BYTE:=0;
+	fbDimmer1		:FB_Dimmer;
+	fbIoT 			: FB_IotCommunicator := ( 
+										sHostName := '192.168.1.122', 
+										nPort := 1883, 
+										sMainTopic := 'Dimmer',
+										sDeviceName := 'BeckhoffSzkolenie');
+										
+	stData: ST_ProcessData;     // Values to send
+	tonTimer : TON;             // Timer to send data
+	*)
+	
+	tsshTermostat		:FB_TriStableSwitchHisteresis;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(*
+//Tri-Stable Switch; Ogrzewanie/Chłodzenie
+tssAnalog(iAnalog:=gvl_IO.iAnalog1, bCooling=>gvl_IO.bOutput1, bHeating=>gvl_IO.bOutput2);
+stData.bCoolingInfo:=tssAnalog.bCooling;
+stData.bHeatingInfo:=tssAnalog.bHeating;
+
+// Dimmer
+fbDimmer1(bEnable:=stData.bPower, bControl:=gvl_IO.bButton3, tTimeOutLimit:=T#1S, bySignal=>byOswietlenie);
+stData.iLightIntensity:=BYTE_TO_INT(fbDimmer1.bySignal);
+
+//Komunikacja IoT
+fbIoT.Execute(TRUE); //keep communication alive 
+tonTimer(IN := NOT tonTimer.Q, PT := T#500MS);
+
+IF fbIoT.bConnected AND tonTimer.Q THEN		//przesył danych do Brokera
+    fbIoT.SendData(ADR(stData), SIZEOF(stData));
+END_IF
+
+IF fbIoT.fbCommand.bAvailable THEN	//nadpisanie danych do sterownika
+    IF fbIoT.fbCommand.sVarName = 'bPower' THEN
+        fbIoT.fbCommand.GetValue(ADR(stData.bPower), SIZEOF(stData.bPower), E_IotCommunicatorDatatype.type_BOOL);
+    END_IF
+    fbIoT.fbCommand.Remove();
+END_IF
+
+//przykład wiadomości
+//fbIoT.SendMessage('This is a test alarm message!');
+*)
+
+tsshTermostat(iAnalogInput:=gvl_IO.iAnalog1, bHeating=>gvl_IO.bOutput2, bCooling=>gvl_IO.bOutput1);
+	]]></ST>
+    </Implementation>
+    <LineIds Name="MAIN">
+      <LineId Id="73" Count="0" />
+      <LineId Id="48" Count="1" />
+      <LineId Id="56" Count="1" />
+      <LineId Id="50" Count="1" />
+      <LineId Id="2" Count="0" />
+      <LineId Id="45" Count="0" />
+      <LineId Id="53" Count="0" />
+      <LineId Id="52" Count="0" />
+      <LineId Id="7" Count="0" />
+      <LineId Id="25" Count="3" />
+      <LineId Id="23" Count="0" />
+      <LineId Id="32" Count="5" />
+      <LineId Id="31" Count="0" />
+      <LineId Id="54" Count="0" />
+      <LineId Id="39" Count="0" />
+      <LineId Id="38" Count="0" />
+      <LineId Id="74" Count="0" />
+      <LineId Id="76" Count="0" />
+      <LineId Id="75" Count="0" />
+      <LineId Id="85" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

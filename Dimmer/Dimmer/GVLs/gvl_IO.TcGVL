@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.4">
+  <GVL Name="gvl_IO" Id="{11021d16-8584-4470-90aa-42ccae0b13b9}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL
+	//INPUTS
+	bButton1	AT%I*	:BOOL;	//bistabilny
+	bButton2	AT%I*	:BOOL;	//bistabilny
+	bButton3	AT%I*	:BOOL;	//monostabilny
+	bButton4	AT%I*	:BOOL;	//monostabilny
+	
+	iAnalog1	AT%I*	:INT;	//potencjometr 1
+	iAnalog2	AT%I*	:INT;	//potencjometr 2
+	
+	//OUTPUTS
+	
+	bOutput1	AT%Q*	:BOOL;	//wyjście 1
+	bOutput2	AT%Q*	:BOOL;	//wyjście 2
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

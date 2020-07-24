@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.4">
+  <POU Name="FB_TriStableSwitch" Id="{ae07a299-fc16-477c-8bfa-8572efb31ed1}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK PUBLIC FB_TriStableSwitch
+VAR_INPUT
+	iAnalog		:INT:=0;
+END_VAR
+VAR_OUTPUT
+	bCooling	:BOOL:=FALSE;
+	bHeating	:BOOL:=FALSE;
+END_VAR
+VAR
+	iSelector	:INT:=0;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[iSelector:=iAnalog/10892;
+CASE iSelector OF
+	0:
+		bCooling:=TRUE;
+		bHeating:=FALSE;
+	1:
+		bCooling:=FALSE;
+		bHeating:=FALSE;
+	2:
+		bCooling:=FALSE;
+		bHeating:=TRUE;
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_TriStableSwitch">
+      <LineId Id="9" Count="0" />
+      <LineId Id="14" Count="1" />
+      <LineId Id="17" Count="1" />
+      <LineId Id="20" Count="1" />
+      <LineId Id="19" Count="0" />
+      <LineId Id="23" Count="1" />
+      <LineId Id="22" Count="0" />
+      <LineId Id="16" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

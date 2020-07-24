@@ -1,0 +1,211 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.4">
+  <POU Name="FB_Dimmer" Id="{8068bfd1-0121-45a3-9092-4a645f41d853}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+Opis bloku FB_Dimmer
+
+Blok służy do obsługi oświetlenia funkcją dimmer.
+Oprócz klasycznego ON/OFF, wyjście może być sterowane płynnie w górę i w dół.
+Cała kontrola odbywa się za pomocą jednego wejścia, preferowany przycisk monostabilny.
+
+Charakterystyka pracy
+Krótkie naciśnięcie powoduje gwałtowne wyłączenie/włączenie światła na wyjściu z bloku.
+Przytrzymanie powoduje stopniowe rozjaśnianie i ściemnianie na przemiennie.
+Po wyłączeniu oświetlenia krótkim naciśnięciem i ponownym włączeniu, powraca ono do natężenia z przed wyłączenia.
+
+-----INPUTS-----
+bEnable		:BOOL:=FALSE;		//wejście uruchamiające cały blok; TRUE - dimmer działa, FLASE - dimmer jest wyłączony
+bControl	:BOOL:=FALSE;		//symulacja przycisku; TRUE - ON, FALSE  - OFF
+tTimeOutLimit	:TIME:=T#1S;	//graniczny czas wciśnięcia przycisku, będący wyróżnikiem trybu pracy przycisku
+	
+-----OUTPUTS-----
+bySignal	:BYTE:=0;	//wyjście na oświetlenie, gdzie 0-wyłączone, 255-w pełni włączone
+
+-----Uwagi-----
+
+
+Wersja:
+TwinCAT 	3.1.4024.10
+Ver 		1.0
+Data		07.2020
+*)
+
+FUNCTION_BLOCK PUBLIC FB_Dimmer
+VAR_INPUT
+	bEnable		:BOOL:=FALSE;	//wejście uruchamiające cały blok; TRUE - dimmer działa, FLASE - dimmer jest wyłączony
+	bControl	:BOOL:=FALSE;	//symulacja przycisku; TRUE - ON, FALSE  - OFF
+	tTimeOutLimit	:TIME:=T#1S;	//graniczny czas wciśnięcia przycisku, będący wyróżnikiem trybu pracy przycisku
+END_VAR
+VAR_OUTPUT
+	bySignal	:BYTE:=0;	//wyjście na oświetlenie, gdzie 0-wyłączone, 255-w pełni włączone
+END_VAR
+VAR
+	bFlagON			:BOOL:=FALSE;	//zmienna określająca stan oświetlenia; TRUE-światło włączone, FALSE-światło wyłączone
+	bFlagValueInMemory	:BOOL:=FALSE;	//informacja o tym, że lampa w poprzednim stanie miała określone natężenie, które zostało zapisane w pamięci
+	bFlagEdge		:BOOL:=TRUE;	//zmienna określająca kierunek zmiany natężenia; TRUE-zwiększanie, FALSE-zmniejszanie
+	bFlagTimeOut	:BOOL:=FALSE;	//zmienna określająca przekroczenie czasu granicznego naciśnięcia, będący wyróżnikiem trybu pracy przycisku
+	bFlagShort		:BOOL:=FALSE;	//określenie czy naciśnięcie było krótkie czy długie; TRUE-krótkie, FALSE-długie
+	bySignalMemory	:BYTE:=0; 		//zmienna zapamiętująca aktualny stan wyjścia
+	ftrigControl	:F_TRIG;		//wykrycie zbocza malejącego na wejściu bControl
+	rtrigControl	:R_TRIG;		//wykrycie zbocza rosnącego na wejściu bControl
+	tonTimer		:TON;			//odmierzanie czasu wstępnego wciśnięcia przycisku
+	bTimerInWork	:BOOL:=FALSE; 	//podtrzymanie timera tonTimer na czas wstępny
+	tonTimerDimmerImpulse	:TON;	//timer tworzący impulsy co określony czas
+	bTimerDimmerImpulse		:BOOL:=FALSE;	//podtrzymanie tonTimerDimmerImpulse, na czas wciśnięcia bControl
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[ftrigControl(CLK:=bControl);	//inicjalizacja wykrywania zbocza malejącego na zmiennej bControl
+rtrigControl(CLK:=bControl);	//inicjalizacja wykrywania zbocza rosnącego na zmiennej bCOntrol
+IF bEnable=TRUE THEN
+	
+	IF rtrigControl.Q=TRUE THEN	bTimerInWork:=TRUE;	END_IF	// start timera tonTimer następuje, gdy wykryte zostanie zbocze rosnące na bControl
+	tonTimer(IN:=bTimerInWork, PT:=tTimeOutLimit);			// wyłączony zostaje on po określonym czasie tTimeOutLimit
+	IF tonTimer.Q=TRUE THEN							//jeżeli timer doliczy do końca wyłącz go poprzez ustawienie flagi bTimerInWork na FALSE
+		bTimerInWork:=FALSE;	
+	END_IF
+	IF bTimerInWork AND ftrigControl.Q = TRUE THEN	//jeżeli timer odlicza i wystąpi zbocze malejące na bControl ustaw flagę bFlagShort na TRUE
+		bFlagShort:=TRUE;							//oznacza to, że wciśnięcie jest krótkie
+	END_IF
+	IF tonTimer.Q=TRUE AND bControl=TRUE THEN	//jeżeli odliczanie timera się zakończy, a bControl nadal jest TRUE, ustaw flagę bFlagShort na FALSE
+		bFlagShort:=FALSE;						//oznacza to, że wciśnięcie jest długie
+		bTimerDimmerImpulse:=TRUE;				//załączenie tonTimerDimmerImpulse
+	END_IF
+	
+	//inicjalizacja pulsatora o okresie 10ms
+	tonTimerDimmerImpulse(IN:=bTimerDimmerImpulse AND NOT tonTimerDimmerImpulse.Q, PT:=T#10MS);
+	
+	//jeżeli wykryto zbocze malejące na bControl i tonTimerDimmerImpulse działa, wyłącz go
+	IF ftrigControl.Q=TRUE AND bTimerDimmerImpulse=TRUE THEN
+		bTimerDimmerImpulse:=FALSE;
+		IF bFlagEdge=TRUE THEN
+			bFlagEdge:=FALSE;
+		ELSE
+			bFlagEdge:=TRUE;
+		END_IF
+	END_IF
+	
+	CASE bySignal OF
+		0:									//przypadek, gdy światło jest wyłączone
+				IF bFlagShort=TRUE THEN		//jeżeli wykryte zostało wciśnięcie krótkie
+					bFlagON:=TRUE;			//ustaw flagę bFlagON na TRUE
+					IF bFlagValueInMemory THEN		//jeżeli lampa została wyłączona krótko
+						bySignal:=bySignalMemory;	//przywrócenie stanu lampy z przed wyłączenia
+						bFlagValueInMemory:=FALSE;	//reset flagi mówiącej o zapisanej wartości wyjścia w pamięci
+					ELSE
+						bySignal:=255;			//w przeciwnym przypadku ustaw bySignal na 255, co oznacza pełne włączenie
+					END_IF
+					bFlagShort:=FALSE;		//reset flagi bFlagShort mówiący o wykonaniu czynności wywołanej krótkim wciśnięciem
+				END_IF
+				
+				IF bTimerDimmerImpulse=TRUE THEN	//jeżeli wciśnięcie jest długie
+					IF bFlagEdge=TRUE THEN			//oraz kierunek jest rosnący
+						bFlagON:=TRUE;		//ustaw flagę bFlagON na TRUE; włącz lampę
+						bySignal:=1;		//ustaw natężenie na minimalne =1
+					END_IF
+				END_IF
+			
+		255:								//przypadek, gdy światło jest włączone w pełni
+				IF bFlagShort=TRUE THEN		//jeżeli wykryte zostało wciśnięcie krótkie
+					bFlagON:=FALSE;			//ustaw flagę bFlagON na FALSE
+					bySignal:=0;			//oraz ustaw bySignal na 0, co oznacza pełne wyłączenie
+					bFlagShort:=FALSE;		//reset flagi bFlagShort mówiący o wykonaniu czynności wywołanej krótkim wciśnięciem
+				END_IF
+				
+				IF  bTimerDimmerImpulse=TRUE THEN	//jeżeli wciśnięcie jest długie
+					IF bFlagEdge=FALSE THEN			//oraz kierunek jest malejący
+						bySignal:=254;				//ustaw natężenie na prawie maksymalne 254
+					END_IF
+				END_IF
+		ELSE								//światło o szarym natężeniu
+				IF bFlagShort=TRUE THEN		//jeżeli wykryte zostało wciśnięcie krótkie
+						bySignalMemory:=bySignal;		//zapisz obecne natężenie do miennej bySignalMemory
+						bFlagValueInMemory:=TRUE;		//ustawienie informacji, że wartość natężenia z przed wyłączenia czeka w pamięci
+						bySignal:=0;					//ustaw nowe natężenie =0
+						bFlagON:=FALSE;					//ustaw flagę bFlagON=FALSE, świadczy to o wyłączeniu lampy
+						bFlagShort:=FALSE;		//reset flagi bFlagShort mówiący o wykonaniu czynności wywołanej krótkim wciśnięciem
+				END_IF
+
+				IF bTimerDimmerImpulse=TRUE THEN	//jeżeli wciśnięcie jest długie
+					IF tonTimerDimmerImpulse.Q=TRUE THEN	//na każdy impuls z impulsatora
+						IF bFlagEdge=TRUE THEN			//gdy kierunek jest rosnący
+							bySignal:=bySignal+1;		//zwiększ natężenie o 1
+						ELSE							//gdy kierunek jest malejący
+							bySignal:=bySignal-1;		//zmniejsz natężenie o 1
+						END_IF
+					END_IF
+				END_IF
+	END_CASE
+
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="FB_Dimmer">
+      <LineId Id="31" Count="1" />
+      <LineId Id="9" Count="0" />
+      <LineId Id="34" Count="0" />
+      <LineId Id="55" Count="0" />
+      <LineId Id="39" Count="0" />
+      <LineId Id="53" Count="0" />
+      <LineId Id="59" Count="1" />
+      <LineId Id="56" Count="0" />
+      <LineId Id="50" Count="1" />
+      <LineId Id="66" Count="1" />
+      <LineId Id="82" Count="0" />
+      <LineId Id="48" Count="0" />
+      <LineId Id="83" Count="1" />
+      <LineId Id="44" Count="1" />
+      <LineId Id="88" Count="0" />
+      <LineId Id="85" Count="1" />
+      <LineId Id="138" Count="0" />
+      <LineId Id="155" Count="0" />
+      <LineId Id="157" Count="1" />
+      <LineId Id="156" Count="0" />
+      <LineId Id="87" Count="0" />
+      <LineId Id="46" Count="0" />
+      <LineId Id="15" Count="0" />
+      <LineId Id="19" Count="0" />
+      <LineId Id="69" Count="0" />
+      <LineId Id="71" Count="0" />
+      <LineId Id="106" Count="1" />
+      <LineId Id="111" Count="0" />
+      <LineId Id="109" Count="1" />
+      <LineId Id="108" Count="0" />
+      <LineId Id="113" Count="0" />
+      <LineId Id="72" Count="0" />
+      <LineId Id="116" Count="1" />
+      <LineId Id="125" Count="1" />
+      <LineId Id="128" Count="0" />
+      <LineId Id="127" Count="0" />
+      <LineId Id="119" Count="0" />
+      <LineId Id="70" Count="0" />
+      <LineId Id="22" Count="0" />
+      <LineId Id="76" Count="2" />
+      <LineId Id="114" Count="0" />
+      <LineId Id="79" Count="0" />
+      <LineId Id="23" Count="0" />
+      <LineId Id="149" Count="1" />
+      <LineId Id="154" Count="0" />
+      <LineId Id="153" Count="0" />
+      <LineId Id="151" Count="0" />
+      <LineId Id="24" Count="0" />
+      <LineId Id="91" Count="0" />
+      <LineId Id="96" Count="0" />
+      <LineId Id="112" Count="0" />
+      <LineId Id="98" Count="0" />
+      <LineId Id="101" Count="0" />
+      <LineId Id="115" Count="0" />
+      <LineId Id="94" Count="0" />
+      <LineId Id="129" Count="0" />
+      <LineId Id="25" Count="0" />
+      <LineId Id="139" Count="0" />
+      <LineId Id="143" Count="0" />
+      <LineId Id="145" Count="0" />
+      <LineId Id="147" Count="1" />
+      <LineId Id="140" Count="1" />
+      <LineId Id="131" Count="0" />
+      <LineId Id="20" Count="0" />
+      <LineId Id="17" Count="0" />
+      <LineId Id="16" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

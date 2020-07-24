@@ -1,0 +1,130 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.4">
+  <POU Name="FB_TriStableSwitchHisteresis" Id="{46b39c87-c128-4cb8-a7bb-c91ad0e0de19}" SpecialFunc="None">
+    <Declaration><![CDATA[(*
+Blok włącza ogrzewaniu, chłodzenie lub nic nie robi w zależności od temperatury i historii układu.
+Temperaturę symuluje nastawa potencjometru analogowego.
+Traktuje się go jako switch tristabilny z podwójną histerezą pracy.
+
+-----INPUTS-----
+Jak w deklaracji poniżej.
+-----OUTPUTS-----
+Jak w deklaracji poniżej.
+
+-----Uwagi-----
+Brak
+
+Wersja:
+TwinCAT		3.1.4024.10
+Wersja		1.0
+Data		07.2020
+*)
+FUNCTION_BLOCK PUBLIC FB_TriStableSwitchHisteresis
+VAR_INPUT
+	iAnalogInput		:INT:=0;	//wejście analogowa symulujące zmianę temperatury
+	
+	iEnableHeating		:INT:=5;	//temperatura załączenia grzania
+	iDisableHeating		:INT:=10;	//temperatura wyłączenia grzania
+	iDisableCooling		:INT:=20;	//temperatura wyłączenia chłodzenia
+	iEnableCooling		:INT:=25;	//temperatura włączenia chłodzenia
+	
+	iTempMin			:INT:=0;	//temperatura na potencjometrze w pozycji dolnej granicznej
+	iTempMax			:INT:=40;	//temperatura na potencjometrze w pozycji górnej granicznej
+END_VAR
+VAR_OUTPUT
+	bHeating		:BOOL:=FALSE;	//wyjście sterujące urządzeniem grzejącym
+	bCooling		:BOOL:=FALSE;	//wyjście sterujące urządzeniem chłodzącym
+END_VAR
+VAR
+	iTemp				:INT:=0;		//obecna temperatura
+	iSectorTemp			:INT:=0;		//dobrany sektor pracy na bazie temperatury
+	iCurrentSector		:INT:=0;		//obecny sektor
+	iPreviousSector		:INT:=0;		//poprzedni sektor [1,2,3,4,5]
+	
+	suUpdate			:FB_SectorUpdate;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[//odczyt temperatury - przeskalowanie wejścia analogowego do zadanych granic temperatury 
+iTemp:=iAnalogInput*(iTempMax-iTempMin)/32676+iTempMin;
+
+//przypisanie sektora na bazie temperatury
+IF iTemp > iTempMin AND iEnableHeating > iTemp 			THEN iSectorTemp:=1; END_IF
+IF iTemp > iEnableHeating AND iDisableHeating > iTemp 	THEN iSectorTemp:=2; END_IF
+IF iTemp > iDisableHeating AND iDisableCooling > iTemp 	THEN iSectorTemp:=3; END_IF
+IF iTemp > iDisableCooling AND iEnableCooling > iTemp 	THEN iSectorTemp:=4; END_IF
+IF iTemp > iEnableCooling AND iTempMax > iTemp 			THEN iSectorTemp:=5; END_IF
+
+CASE iSectorTemp OF
+	1:	//sektor 1, w którym grzanie jest zawsze włączone
+		//uaktualnienie historii układu
+		suUpdate(iS:=1, iCS_IN_OUT:=iCurrentSector, iPS_IN_OUT:=iPreviousSector);
+		bHeating:=TRUE;
+		bCooling:=FALSE;
+	2:	//sektor 2
+		//uaktualnienie historii układu
+		suUpdate(iS:=2, iCS_IN_OUT:=iCurrentSector, iPS_IN_OUT:=iPreviousSector);
+		CASE iPreviousSector OF			//jeżeli poprzednim sektorem był
+			1:
+				bHeating:=TRUE;			//1, wtedy załącz grzanie
+				bCooling:=FALSE;		
+			3:
+				bHeating:=FALSE;		//3, wtedy stan neutralny
+				bCooling:=FALSE;
+		END_CASE
+	3:	////sektor 3, w którym grzanie i chłodzenie są wyłączone
+		//uaktualnienie historii układu
+		suUpdate(iS:=3, iCS_IN_OUT:=iCurrentSector, iPS_IN_OUT:=iPreviousSector);
+		bHeating:=FALSE;
+		bCooling:=FALSE;
+	4:	//sektor 4
+		//uaktualnienie historii układu
+		suUpdate(iS:=4, iCS_IN_OUT:=iCurrentSector, iPS_IN_OUT:=iPreviousSector);
+		CASE iPreviousSector OF			//jeżeli poprzednim sektorem był
+			3:
+				bHeating:=FALSE;		//3, wtedy stan neutralny
+				bCooling:=FALSE;
+			5:
+				bHeating:=FALSE;		//5, wtedy załącz chłodzenie
+				bCooling:=TRUE;
+		END_CASE
+	5:	//sektor 5, w którym chłodzenie jest zawsze włączone
+		//uaktualnienie historii układu
+		suUpdate(iS:=5, iCS_IN_OUT:=iCurrentSector, iPS_IN_OUT:=iPreviousSector);
+		bHeating:=FALSE;
+		bCooling:=TRUE;
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_TriStableSwitchHisteresis">
+      <LineId Id="24" Count="0" />
+      <LineId Id="9" Count="0" />
+      <LineId Id="77" Count="0" />
+      <LineId Id="71" Count="0" />
+      <LineId Id="27" Count="0" />
+      <LineId Id="72" Count="4" />
+      <LineId Id="26" Count="0" />
+      <LineId Id="28" Count="0" />
+      <LineId Id="65" Count="0" />
+      <LineId Id="44" Count="0" />
+      <LineId Id="30" Count="3" />
+      <LineId Id="66" Count="0" />
+      <LineId Id="47" Count="0" />
+      <LineId Id="50" Count="0" />
+      <LineId Id="52" Count="4" />
+      <LineId Id="51" Count="0" />
+      <LineId Id="34" Count="1" />
+      <LineId Id="67" Count="0" />
+      <LineId Id="48" Count="0" />
+      <LineId Id="41" Count="0" />
+      <LineId Id="36" Count="1" />
+      <LineId Id="68" Count="0" />
+      <LineId Id="58" Count="6" />
+      <LineId Id="57" Count="0" />
+      <LineId Id="38" Count="1" />
+      <LineId Id="69" Count="0" />
+      <LineId Id="49" Count="0" />
+      <LineId Id="40" Count="0" />
+      <LineId Id="29" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>
